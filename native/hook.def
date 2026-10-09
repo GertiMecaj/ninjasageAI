@@ -1,0 +1,4 @@
+LIBRARY NinjaSageHook
+EXPORTS
+ DetourFinishHelperProcess @1
+ LaunchGame=_LaunchGame @2

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup>
+  <OutputType>WinExe</OutputType><TargetFramework>net8.0-windows</TargetFramework>
+  <UseWindowsForms>true</UseWindowsForms><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+  <PlatformTarget>x86</PlatformTarget><RuntimeIdentifier>win-x86</RuntimeIdentifier>
+  <AssemblyName>NinjaSageAI</AssemblyName><SelfContained>true</SelfContained>
+  <PublishSingleFile>true</PublishSingleFile>
+ </PropertyGroup>
+ <ItemGroup><EmbeddedResource Include="profile.json" /></ItemGroup>
+</Project>

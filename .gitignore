@@ -1,0 +1,10 @@
+app/bin/
+app/obj/
+out/
+publish/
+vendor/
+__pycache__/
+*.obj
+*.lib
+*.exp
+*.zip

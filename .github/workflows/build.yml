@@ -1,0 +1,61 @@
+name: Windows build and injection tests
+on: [push, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+      - name: Verify bytecode guard semantics
+        run: python -m unittest discover -s tests -v
+      - name: Build Microsoft Detours 4.0.1
+        shell: cmd
+        run: |
+          git clone --depth 1 --branch v4.0.1 https://github.com/microsoft/Detours.git vendor\Detours
+          if errorlevel 1 exit /b 1
+          cd vendor\Detours\src
+          nmake
+      - name: Build native DLL and test hosts
+        shell: cmd
+        run: |
+          mkdir out
+          cl /nologo /std:c++17 /EHsc /MT /O2 /LD /Ivendor\Detours\include native\hook.cpp /link /DEF:native\hook.def /LIBPATH:vendor\Detours\lib.X86 detours.lib /OUT:out\NinjaSageHook.dll
+          if errorlevel 1 exit /b 1
+          cl /nologo /std:c++17 /EHsc /MT tests\probe.cpp /Fe:out\probe.exe
+          if errorlevel 1 exit /b 1
+          cl /nologo /std:c++17 /EHsc /MT /Ivendor\Detours\include tests\injection.cpp /link /LIBPATH:vendor\Detours\lib.X86 detours.lib /OUT:out\injection.exe
+          if errorlevel 1 exit /b 1
+      - name: Test actual x86 DLL injection and file redirection
+        shell: pwsh
+        run: |
+          $original = Join-Path $PWD 'out\NinjaSage.swf'
+          $patched = Join-Path $PWD 'out\patched.swf'
+          [IO.File]::WriteAllText($original,'ORIGINAL')
+          [IO.File]::WriteAllText($patched,'PATCHED')
+          & .\out\probe.exe $original ORIGINAL
+          if ($LASTEXITCODE -ne 0) { throw 'Baseline failed' }
+          & .\out\injection.exe (Join-Path $PWD 'out\probe.exe') $original $patched (Join-Path $PWD 'out\NinjaSageHook.dll')
+          if ($LASTEXITCODE -ne 0) { throw 'Injected redirection failed' }
+          if ([IO.File]::ReadAllText($original) -ne 'ORIGINAL') { throw 'Original modified' }
+          $log = [IO.File]::ReadAllText("$patched.log")
+          if (!$log.Contains('HOOK_READY') -or !$log.Contains('REDIRECTED')) { throw 'Missing hook confirmation' }
+      - name: Publish Windows application
+        run: dotnet publish app/NinjaSageAI.csproj -c Release -r win-x86 --self-contained true -o publish
+      - name: Package
+        shell: pwsh
+        run: |
+          Copy-Item out/NinjaSageHook.dll publish/
+          Copy-Item README.md publish/
+          Copy-Item vendor/Detours/LICENSE.md publish/Detours-LICENSE.md
+          Compress-Archive -Path publish/* -DestinationPath NinjaSageAI-Windows-x86.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NinjaSageAI-Windows-x86
+          path: NinjaSageAI-Windows-x86.zip
