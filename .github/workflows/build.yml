@@ -48,6 +48,14 @@ jobs:
           if (!$log.Contains('HOOK_READY') -or !$log.Contains('REDIRECTED')) { throw 'Missing hook confirmation' }
       - name: Publish Windows application
         run: dotnet publish app/NinjaSageAI.csproj -c Release -r win-x86 --self-contained true -o publish
+      - name: Test packaged app native bridge and render UI
+        shell: pwsh
+        run: |
+          Copy-Item out/NinjaSageHook.dll publish/
+          $p = Start-Process -FilePath ./publish/NinjaSageAI.exe -ArgumentList @('--native-self-test', (Join-Path $PWD 'out/probe.exe'), (Join-Path $PWD 'out/bridge-test')) -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content out/bridge-test/failure.txt -ErrorAction SilentlyContinue; throw 'Packaged native bridge failed' }
+          $p = Start-Process -FilePath ./publish/NinjaSageAI.exe -ArgumentList @('--render-preview', (Join-Path $PWD 'preview.png')) -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or !(Test-Path preview.png)) { throw 'UI smoke test failed' }
       - name: Package
         shell: pwsh
         run: |
@@ -58,4 +66,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: NinjaSageAI-Windows-x86
-          path: NinjaSageAI-Windows-x86.zip
+          path: |
+            NinjaSageAI-Windows-x86.zip
+            preview.png

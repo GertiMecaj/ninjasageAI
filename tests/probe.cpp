@@ -3,6 +3,8 @@
 #include <cstdio>
 static std::string Read(HANDLE h){char b[128]={};DWORD n=0;if(h==INVALID_HANDLE_VALUE)return "OPEN_FAILED";ReadFile(h,b,127,&n,nullptr);CloseHandle(h);return std::string(b,n);}
 int wmain(int argc,wchar_t** argv){
+ wchar_t env[32768];wchar_t* fallback[3]={argv[0],env,const_cast<wchar_t*>(L"PATCHED")};
+ if(argc==1){if(!GetEnvironmentVariableW(L"NSAI_ORIGINAL",env,32768))return 13;argv=fallback;argc=3;}
  if(argc!=3)return 10;
  std::string expected;for(const wchar_t* p=argv[2];*p;p++)expected+=(char)*p;
  auto a=Read(CreateFileW(argv[1],GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,0,nullptr));

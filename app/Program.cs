@@ -5,12 +5,26 @@ namespace NinjaSageAI;
 static class Program {
  [STAThread] static void Main(string[] args){
   if(args.Length==3&&args[0]=="--patch"){try{Patcher.Create(args[1],args[2]);Environment.Exit(0);}catch{Environment.Exit(1);}return;}
-  ApplicationConfiguration.Initialize();Application.Run(new MainForm());
+  if(args.Length==3&&args[0]=="--native-self-test"){
+   try{
+    Directory.CreateDirectory(args[2]);var original=Path.Combine(args[2],"NinjaSage.swf");var patched=Path.Combine(args[2],"patched.swf");var log=Path.Combine(args[2],"hook.log");
+    File.WriteAllText(original,"ORIGINAL");File.WriteAllText(patched,"PATCHED");
+    uint error=MainForm.LaunchGame(args[1],original,patched,log,out var pid);if(error!=0)throw new Win32Exception((int)error);
+    using var process=Process.GetProcessById((int)pid);if(!process.WaitForExit(15000)){process.Kill();throw new Exception("Test timed out");}
+    if(process.ExitCode!=0||File.ReadAllText(original)!="ORIGINAL"||!File.ReadAllText(log).Contains("REDIRECTED"))throw new Exception("Native bridge failed");
+    Environment.Exit(0);
+   }catch(Exception e){File.WriteAllText(Path.Combine(args[2],"failure.txt"),e.ToString());Environment.Exit(1);}return;
+  }
+  ApplicationConfiguration.Initialize();
+  if(args.Length==2&&args[0]=="--render-preview"){
+   using var form=new MainForm();form.Show();Application.DoEvents();using var bitmap=new Bitmap(form.Width,form.Height);form.DrawToBitmap(bitmap,new Rectangle(Point.Empty,form.Size));bitmap.Save(args[1]);return;
+  }
+  Application.Run(new MainForm());
  }
 }
 public class MainForm:Form {
  [DllImport("NinjaSageHook.dll",CallingConvention=CallingConvention.Cdecl,CharSet=CharSet.Unicode,ExactSpelling=true)]
- static extern uint LaunchGame(string exe,string original,string patched,string log,out uint pid);
+ internal static extern uint LaunchGame(string exe,string original,string patched,string log,out uint pid);
  readonly TextBox path=new(){Dock=DockStyle.Fill,PlaceholderText="Select Ninja Sage.exe from the extracted game folder"};
  readonly TextBox status=new(){Multiline=true,ReadOnly=true,Dock=DockStyle.Fill,ScrollBars=ScrollBars.Vertical,BackColor=Color.FromArgb(20,25,34),ForeColor=Color.FromArgb(205,222,238),BorderStyle=BorderStyle.None};
  readonly Button start=new(){Text="Launch with enemy skip",AutoSize=true};
