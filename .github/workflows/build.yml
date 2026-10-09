@@ -48,7 +48,7 @@ jobs:
           if (!$log.Contains('HOOK_READY') -or !$log.Contains('REDIRECTED')) { throw 'Missing hook confirmation' }
       - name: Publish Windows application
         run: dotnet publish app/NinjaSageAI.csproj -c Release -r win-x86 --self-contained true -o publish
-      - name: Test packaged app native bridge and render UI
+      - name: Test live OFF-ON-OFF in the same process and render UI
         shell: pwsh
         run: |
           Copy-Item out/NinjaSageHook.dll publish/

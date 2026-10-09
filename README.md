@@ -1,33 +1,39 @@
-# NinjaSage AI test launcher
+# NinjaSage AI — live enemy-skip switch
 
-Windows x86 launcher and injected DLL for the exact Adobe AIR build supplied in NinjaSage.rar. **Skip-only mode**: the main battle system's enemy-side actors advance the turn without selecting an attack. This covers the shared dispatcher for enemies, NPCs, pets and AI characters; actual coverage of each game mode requires in-game validation. Live PvP uses a separate system and is not patched. Charge is not implemented, because a uniform charge action is not established for all actor types.
+Windows launcher with a live **OFF / ON** switch for the exact Adobe AIR game supplied in NinjaSage.rar. Every session starts **OFF**, with original enemy decision code running. Switch **ON** to skip enemy-side turns in the main battle system; switch **OFF** to resume original decisions without restarting the game.
 
-## Run
+## Use
 
-1. Download the `NinjaSageAI-Windows-x86` artifact from this repository's successful Actions run and extract both ZIP layers if GitHub wraps the artifact.
-2. Keep `NinjaSageAI.exe` and `NinjaSageHook.dll` together. Use a path representable in the Windows system code page (for example `C:\NinjaSageAI`); Detours' DLL path parameter is ANSI.
-3. Extract the original game archive and close existing game instances.
-4. Open `NinjaSageAI.exe`, browse to `Ninja Sage.exe`, and click **Launch with enemy skip**.
-5. Wait for **DLL hook installed** and **Patched SWF opened by the game**. These confirm injection and redirection, not the outcome of a battle. Test a normal enemy, boss, NPC and pet turn in your test environment.
-6. Close the game and click **Launch normal** to return to the original behavior.
+1. Extract the download. Keep `NinjaSageAI.exe` and `NinjaSageHook.dll` together.
+2. Close any previously launched game instance. Open this launcher and browse to the extracted game's `Ninja Sage.exe`.
+3. Click **Launch game (starts OFF)**. The launcher loads runtime control support, with enemy skipping disabled.
+4. After the game opens its patched SWF, **Enemy skip: OFF** becomes clickable.
+5. Click it to turn **ON**, then click it again for **OFF**. The game stays open. The change is checked at the next enemy decision; an attack or animation already underway is not cancelled.
+6. Keep the launcher open while using the switch. Closing it resets OFF; the injected controller also treats a terminated launcher as OFF.
 
-No Python, Visual Studio, .NET installation, administrator privileges or manual injector is required for the packaged self-contained app. The app launches a new process with the DLL before the AIR runtime loads the SWF. Attaching to an already-running game is intentionally unsupported: AVM2 may have already compiled the original bytecode.
+A game started directly, or through the old skip-only launcher, must be restarted through this version once. Attaching to an arbitrary already-running AVM2 instance is not implemented. The game files are not overwritten. No administrator privileges or .NET installation are required for the self-contained download. For the launcher's own folder, use a path representable in the Windows system code page, such as `C:\NinjaSageAI`, because Microsoft Detours takes an ANSI DLL path.
 
-## How it works
+## Scope and status
 
-- SHA-256 allowlist: `d9c550cfdd3de9ce63e2d9b5a81bf3535c8440189c9a7c1abbb4b9923952c53d`.
-- A private patched SWF is created under `%LOCALAPPDATA%\NinjaSageAI\<session>`; the original is never overwritten by this tool.
-- Microsoft Detours injects the native x86 DLL at process startup. The DLL redirects read-only `CreateFileW/A` opens of the exact original SWF path to the private copy. Other files, write operations and other processes are unaffected.
-- AVM2 guards are prepended to `Combat.Battle.setActionsAvailable`, `handleNonControllableAttacker` and `handleSkipTurns`. If `attacker_model.getPlayerTeam() == "enemy"`, the guard calls `agility_bar_manager.startRun()` and returns. Original code executes for other teams. Existing relative branches remain valid; methods have no exception tables. SWF/DoABC/method lengths are rebuilt.
-- Damage-over-time, passive effects and counters outside these dispatchers are not removed. This is a turn-selection patch, not invulnerability.
-- New game versions are rejected. No assets, credentials, proprietary game binaries or account data are uploaded to this repository.
+This is **skip-only** mode, not charge. It targets `Combat.Battle` dispatch for enemy-side enemies, NPCs, pets and AI-controlled characters. Live PvP has a separate system and is not patched. Passive damage, counters and damage-over-time outside turn selection are not removed.
 
-## Validation and limits
+The UI distinguishes the requested switch state from a game-side switch read. “Game checked the switch” confirms a native control query; it does not independently prove a particular battle outcome. In-game verification of all enemy types and game modes is still required.
 
-The profile generator parses all 860 classes / 12,745 methods in the supplied main SWF and reparses the patched ABC. Unit tests exercise the injected guards and preservation of original method bytes. CI builds on Windows and tests real native injection, both ANSI/Unicode read redirection, hook confirmations, and preservation of the original file using a synthetic host.
+## Implementation
 
-The actual game requires interactive Windows testing. This project does **not** claim every enemy or battle mode has been run. A confirmed SWF read does not establish that AIR accepts the patched SWF or that every battle path behaves correctly. If the launcher reports no confirmation, or a battle stalls, use a normal launch and retain the session log for diagnosis.
+- Exact source SWF SHA-256: `d9c550cfdd3de9ce63e2d9b5a81bf3535c8440189c9a7c1abbb4b9923952c53d`. Unknown builds are rejected.
+- A separate SWF under `%LOCALAPPDATA%\NinjaSageAI\<session>` contains a conditional guard at three dispatchers: `setActionsAvailable`, `handleNonControllableAttacker`, and `handleSkipTurns`.
+- The guard checks the actor's enemy-team membership, then freshly resolves `File.applicationDirectory.resolvePath(".ninjasage-ai-control").exists`. OFF falls through to the original bytecode. ON calls the existing `agility_bar_manager.startRun()` skip path and returns.
+- No physical control file is created. The injected DLL supplies that exact virtual path's existence via `GetFileAttributesW/A` and `GetFileAttributesExW/A`, backed by a session-specific named Windows event. Different sessions have independent switches. The controller also checks whether the launcher process remains alive.
+- DLL injection happens once, before AIR loads the main SWF. Read-only opens of the exact main SWF path are redirected to the prepared copy. Toggling changes the shared event; it does not repeatedly patch files, rewrite JIT code, or reinject the DLL.
+- The original game files and other processes are unaffected by this tool. Temporary test copies and logs can be deleted after closing the relevant game session.
+
+## Validation
+
+The profile generator reparses the complete patched ABC, including appended string and QName constants and updated SWF/DoABC/method lengths. Tests execute the shipped guard bytes for OFF → ON → OFF transitions across enemy and non-enemy teams, check stack bounds, and verify preservation of the original instruction stream.
+
+Windows CI compiles the DLL and self-contained app; tests actual injection and ANSI/Unicode SWF redirection; and drives the packaged launcher's real native bridge through OFF → ON → OFF in the **same running process**, checking all four file-attribute APIs and preserving the source file. It also renders the interface. These tests use a synthetic host, not a logged-in game session.
 
 ## Build
 
-GitHub Actions builds the native DLL with MSVC, Microsoft Detours v4.0.1 (MIT), and the self-contained .NET 8 Windows Forms application. See `.github/workflows/build.yml`. Build output includes the Detours license. `tools/make_profile.py <original.swf> app/profile.json` reproduces the exact profile from the supplied build; it is not a generic updater for unknown builds.
+See `.github/workflows/build.yml`: MSVC x86, Microsoft Detours v4.0.1 (MIT), and .NET 8 Windows Forms. The binary package includes the Detours license. `tools/make_profile.py <original.swf> app/profile.json` regenerates this exact-build profile; it is not a generic patcher for future game versions.

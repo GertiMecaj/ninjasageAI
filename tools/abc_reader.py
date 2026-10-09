@@ -15,14 +15,16 @@ class ABC(Reader):
   super().__init__(b);self.take(4)
   for k in range(2):
    for _ in range(self.u30()-1):self.u30()
-  self.take(8*max(0,self.u30()-1));self.s=['']
-  for _ in range(self.u30()-1):self.s.append(self.take(self.u30()).decode('utf8','replace'))
+  self.take(8*max(0,self.u30()-1));self.string_count_pos=self.p;string_count=self.u30();self.string_count_end=self.p;self.s=['']
+  for _ in range(string_count-1):self.s.append(self.take(self.u30()).decode('utf8','replace'))
+  self.string_end=self.p
   self.ns=[(0,0)]
   for _ in range(self.u30()-1):self.ns.append((self.u8(),self.u30()))
   for _ in range(self.u30()-1):
    for j in range(self.u30()):self.u30()
+  self.multiname_count_pos=self.p;multiname_count=self.u30();self.multiname_count_end=self.p
   self.mn=[''];self.mndata=[None]
-  for _ in range(self.u30()-1):
+  for _ in range(multiname_count-1):
    k=self.u8();a=[]
    if k in (7,13):
     a=[self.u30(),self.u30()];name=self.s[a[1]];ns=self.s[self.ns[a[0]][1]];name=ns+':'+name if ns else name
@@ -34,6 +36,7 @@ class ABC(Reader):
     a=[self.u30()];a += [self.u30() for j in range(self.u30())];name='generic'
    else:raise ValueError(('mn',k,self.p))
    self.mn.append(name);self.mndata.append((k,a))
+  self.multiname_end=self.p
   self.methods=[]
   for _ in range(self.u30()):
    n=self.u30();ret=self.u30();params=[self.u30() for j in range(n)];name=self.s[self.u30()];flags=self.u8()
