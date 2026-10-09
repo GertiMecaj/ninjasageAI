@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Microsoft.Win32.SafeHandles;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 namespace NinjaSageAI;
@@ -9,9 +10,11 @@ static class Program {
    try{
     Directory.CreateDirectory(args[2]);var original=Path.Combine(args[2],"NinjaSage.swf");var patched=Path.Combine(args[2],"patched.swf");var log=Path.Combine(args[2],"hook.log");
     File.WriteAllText(original,"ORIGINAL");File.WriteAllText(patched,"PATCHED");
-    uint error=MainForm.LaunchGame(args[1],original,patched,log,out var pid);if(error!=0)throw new Win32Exception((int)error);
-    using var process=Process.GetProcessById((int)pid);if(!process.WaitForExit(15000)){process.Kill();throw new Exception("Test timed out");}
-    if(process.ExitCode!=0||File.ReadAllText(original)!="ORIGINAL"||!File.ReadAllText(log).Contains("REDIRECTED"))throw new Exception("Native bridge failed");
+    uint error=MainForm.LaunchGame(args[1],original,patched,log,out var pid,out var handle);if(error!=0)throw new Win32Exception((int)error);
+    using var ownedHandle=handle;
+    if(MainForm.WaitForSingleObject(handle,15000)!=0){MainForm.TerminateProcess(handle,1);throw new Exception("Test timed out");}
+    if(!MainForm.GetExitCodeProcess(handle,out var exitCode))throw new Win32Exception();
+    if(exitCode!=0||File.ReadAllText(original)!="ORIGINAL"||!File.ReadAllText(log).Contains("REDIRECTED"))throw new Exception("Native bridge failed");
     Environment.Exit(0);
    }catch(Exception e){File.WriteAllText(Path.Combine(args[2],"failure.txt"),e.ToString());Environment.Exit(1);}return;
   }
@@ -24,7 +27,10 @@ static class Program {
 }
 public class MainForm:Form {
  [DllImport("NinjaSageHook.dll",CallingConvention=CallingConvention.Cdecl,CharSet=CharSet.Unicode,ExactSpelling=true)]
- internal static extern uint LaunchGame(string exe,string original,string patched,string log,out uint pid);
+ internal static extern uint LaunchGame(string exe,string original,string patched,string log,out uint pid,out SafeProcessHandle process);
+ [DllImport("kernel32.dll",SetLastError=true)] internal static extern uint WaitForSingleObject(SafeProcessHandle process,uint milliseconds);
+ [DllImport("kernel32.dll",SetLastError=true)] [return:MarshalAs(UnmanagedType.Bool)] internal static extern bool GetExitCodeProcess(SafeProcessHandle process,out uint code);
+ [DllImport("kernel32.dll",SetLastError=true)] [return:MarshalAs(UnmanagedType.Bool)] internal static extern bool TerminateProcess(SafeProcessHandle process,uint code);
  readonly TextBox path=new(){Dock=DockStyle.Fill,PlaceholderText="Select Ninja Sage.exe from the extracted game folder"};
  readonly TextBox status=new(){Multiline=true,ReadOnly=true,Dock=DockStyle.Fill,ScrollBars=ScrollBars.Vertical,BackColor=Color.FromArgb(20,25,34),ForeColor=Color.FromArgb(205,222,238),BorderStyle=BorderStyle.None};
  readonly Button start=new(){Text="Launch with enemy skip",AutoSize=true};
@@ -58,7 +64,8 @@ public class MainForm:Form {
    start.Enabled=false;
    session=Path.Combine(root,DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N")[..8]);Directory.CreateDirectory(session);
    var patched=Path.Combine(session,"NinjaSage.test.swf");Patcher.Create(swf,patched);Say("Exact build verified. Test copy created; original untouched.");
-   logFile=Path.Combine(session,"hook.log");uint err=LaunchGame(exe,swf,patched,logFile,out var pid);
+   logFile=Path.Combine(session,"hook.log");uint err=LaunchGame(exe,swf,patched,logFile,out var pid,out var handle);
+   using var ownedHandle=handle;
    if(err!=0)throw new Win32Exception((int)err,"DLL launch failed: "+new Win32Exception((int)err).Message);
    game=Process.GetProcessById((int)pid);launched=DateTime.UtcNow;Say($"Process {pid} started. Waiting for DLL and SWF confirmation…");
   }catch(Exception e){Say("ERROR: "+e.Message);MessageBox.Show(this,e.Message,"Launch failed",MessageBoxButtons.OK,MessageBoxIcon.Error);}finally{start.Enabled=true;}

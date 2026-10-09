@@ -31,7 +31,7 @@ static HANDLE WINAPI HookA(LPCSTR p,DWORD a,DWORD s,LPSECURITY_ATTRIBUTES sa,DWO
  if(p && MultiByteToWideChar(cp,0,p,-1,wide,32768)>0 && Match(wide,a,d))return HookW(wide,a,s,sa,d,f,t);
  return RealA(p,a,s,sa,d,f,t);
 }
-extern "C" DWORD __cdecl LaunchGame(const WCHAR* exe,const WCHAR* swf,const WCHAR* patched,const WCHAR* log,DWORD* pid){
+extern "C" DWORD __cdecl LaunchGame(const WCHAR* exe,const WCHAR* swf,const WCHAR* patched,const WCHAR* log,DWORD* pid,HANDLE* process){
  WCHAR dllWide[32768];if(!GetModuleFileNameW(selfModule,dllWide,32768))return GetLastError();
  char dllPath[32768];BOOL used=FALSE;
  if(!WideCharToMultiByte(CP_ACP,WC_NO_BEST_FIT_CHARS,dllWide,-1,dllPath,32768,nullptr,&used)||used)return ERROR_NO_UNICODE_TRANSLATION;
@@ -47,7 +47,7 @@ extern "C" DWORD __cdecl LaunchGame(const WCHAR* exe,const WCHAR* swf,const WCHA
  STARTUPINFOW si={sizeof(si)};PROCESS_INFORMATION pi={};
  if(!DetourCreateProcessWithDllExW(exe,cmd.data(),nullptr,nullptr,FALSE,CREATE_SUSPENDED|CREATE_UNICODE_ENVIRONMENT,env.data(),dir.c_str(),&si,&pi,dllPath,nullptr))return GetLastError();
  if(ResumeThread(pi.hThread)==(DWORD)-1){DWORD e=GetLastError();TerminateProcess(pi.hProcess,e);CloseHandle(pi.hThread);CloseHandle(pi.hProcess);return e;}
- *pid=pi.dwProcessId;CloseHandle(pi.hThread);CloseHandle(pi.hProcess);return 0;
+ *pid=pi.dwProcessId;*process=pi.hProcess;CloseHandle(pi.hThread);return 0;
 }
 BOOL WINAPI DllMain(HINSTANCE h,DWORD reason,LPVOID){
  if(DetourIsHelperProcess())return TRUE;
